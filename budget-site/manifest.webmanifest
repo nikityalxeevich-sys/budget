@@ -1,0 +1,16 @@
+{
+  "name": "Мой бюджет",
+  "short_name": "Бюджет",
+  "description": "Семейный и личный бюджет: доходы, расходы, накопления и инвестиции",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f4f8",
+  "theme_color": "#2447c9",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

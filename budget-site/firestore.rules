@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Общий бюджет: только две почты из списка. Впишите свои, строчными буквами.
+    match /families/main/{document=**} {
+      allow read, write: if request.auth != null
+        && request.auth.token.email in ['ПОЧТА_1@gmail.com', 'ПОЧТА_2@gmail.com'];
+    }
+
+    // Личный бюджет: каждый видит только свои данные.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
