@@ -51,7 +51,18 @@ const PAL = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '
 .dl b{font-family:var(--f-num);font-weight:500;white-space:nowrap}
 .dl em{font-style:normal;color:var(--muted);font-size:.78rem;min-width:2.8em;text-align:right}
 .dl i{flex:0 0 auto;width:10px;height:10px;border-radius:2px;display:inline-block}
-@media (max-width:560px){.donuts{grid-template-columns:minmax(0,1fr)}}`;
+@media (max-width:560px){.donuts{grid-template-columns:minmax(0,1fr)}}
+.opf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.of{display:flex;flex-direction:column;gap:4px;min-width:0}
+.of label{font-size:.8rem;color:var(--muted)}
+.of input,.of select{width:100%;min-width:0;min-height:44px;font:inherit;font-size:16px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.of input{-webkit-appearance:none;appearance:none}
+.opl{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column}
+.opl li{display:grid;grid-template-columns:3.8em minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.opd{color:var(--muted);font-size:.85rem}
+.opn{min-width:0;overflow-wrap:anywhere}
+.opn small{display:block;color:var(--muted);font-size:.78rem}
+@media (max-width:420px){.opf{grid-template-columns:minmax(0,1fr)}}`;
   document.head.appendChild(st);
 })();
 
@@ -62,7 +73,7 @@ let mode = 'personal';
 try { if (localStorage.getItem(MODEKEY) === 'family') mode = 'family'; } catch (e) {}
 
 function blank(m) {
-  return { lines: DEF[m].map(l => ({ ...l })), amt: {}, contrib: {}, open: {}, rate: { sav: 0, inv: 0 },
+  return { lines: DEF[m].map(l => ({ ...l })), amt: {}, contrib: {}, ops: {}, open: {}, rate: { sav: 0, inv: 0 },
     metaExists: false, ready: false, pending: false, failed: false, denied: false };
 }
 const DATA = { family: blank('family'), personal: blank('personal') };
@@ -159,7 +170,7 @@ function setRate(field, val) {
 /* ---------- чтение ---------- */
 function applySnap(m, snap) {
   const allowed = m === 'family' ? ['expense', 'saving', 'invest', 'wsav', 'winv'] : ['income', 'expense', 'saving', 'invest', 'wsav', 'winv'];
-  const lines = [], amt = {}, contrib = {}, open = {}, rate = { sav: 0, inv: 0 };
+  const lines = [], amt = {}, contrib = {}, ops = {}, open = {}, rate = { sav: 0, inv: 0 };
   let meta = false;
   snap.docs.forEach(d => {
     const x = d.data() || {};
@@ -180,12 +191,18 @@ function applySnap(m, snap) {
       const k = d.id.slice(2), A = (x.amt && typeof x.amt === 'object') ? x.amt : {};
       Object.keys(A).forEach(id => { (amt[id] = amt[id] || {})[k] = num(A[id]); });
       if (num(x.contrib)) contrib[k] = num(x.contrib);
+      const O = (x.ops && typeof x.ops === 'object') ? x.ops : {};
+      Object.keys(O).forEach(id => {
+        const o = O[id];
+        if (!o || o.x || typeof o.l !== 'string' || !(num(o.a) > 0)) return;
+        (ops[k] = ops[k] || []).push({ id, d: num(o.d), l: o.l, a: num(o.a), n: typeof o.n === 'string' ? o.n : '', u: typeof o.u === 'string' ? o.u : '', t: num(o.t) });
+      });
     }
   });
   const D = DATA[m];
   D.lines = meta ? lines : DEF[m].map(l => ({ ...l }));
   D.lines.sort((a, b) => (a.t - b.t) || (a.id < b.id ? -1 : 1));
-  D.amt = amt; D.contrib = contrib; D.open = open; D.rate = rate;
+  D.amt = amt; D.contrib = contrib; D.ops = ops; D.open = open; D.rate = rate;
   D.metaExists = meta; D.ready = true; D.denied = false;
   D.pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
 }
@@ -222,6 +239,8 @@ window.addEventListener('offline', showSync);
 function sums(k) {
   const D = cur(), s = { income: 0, expense: 0, saving: 0, invest: 0, wsav: 0, winv: 0 };
   D.lines.forEach(l => { const a = D.amt[l.id]; if (a) s[l.g] += num(a[k]); });
+  const gmap = {}; D.lines.forEach(l => { gmap[l.id] = l.g; });
+  (D.ops[k] || []).forEach(o => { const g = gmap[o.l]; if (g) s[g] += o.a; });
   if (mode === 'family') { s.contrib = num(D.contrib[k]); s.src = s.contrib * 2; } else { s.src = s.income; }
   s.wd = s.wsav + s.winv;               // снято с накоплений и инвестиций
   s.base = s.src + s.wd;                // все деньги месяца
@@ -231,6 +250,7 @@ function sums(k) {
 }
 function dataHas(y) {
   const D = cur(), p = y + '-';
+  if (Object.keys(D.ops).some(k => k.indexOf(p) === 0 && D.ops[k].length)) return true;
   if (mode === 'family' && Object.keys(D.contrib).some(k => k.indexOf(p) === 0 && D.contrib[k])) return true;
   return Object.keys(D.amt).some(id => { const a = D.amt[id]; return Object.keys(a).some(k => k.indexOf(p) === 0 && a[k]); });
 }
@@ -302,17 +322,82 @@ function renderAll() {
 }
 
 /* ---------- месяц ---------- */
-function rowHtml(l, k) {
+function rowBase(l, k) {
   const v = num((cur().amt[l.id] || {})[k]);
   return `<div class="row"><input class="nm" id="nm-${l.id}" type="text" maxlength="60" value="${esc(l.n)}" data-nm="${l.id}" aria-label="Название статьи">` +
     `<input class="amt" id="am-${l.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${v ? v : ''}" data-am="${l.id}" aria-label="Сумма за месяц, ${esc(l.n)}">` +
     `<button type="button" class="x" data-del="${l.id}" aria-label="Удалить статью ${esc(l.n)}">×</button></div>`;
 }
+function rowHtml(l, k) {
+  const sub = (cur().ops[k] || []).reduce((t, o) => t + (o.l === l.id ? o.a : 0), 0);
+  return rowBase(l, k) + (sub ? `<p class="pnote" style="margin:0 0 6px 2px">Из записей по дням: ${money(sub)}</p>` : '');
+}
+
+/* ---------- записи по дням ---------- */
+let opDate = '', opLine = '';
+function monthBounds() {
+  const k = ym(YEAR, view), last = new Date(YEAR, view + 1, 0).getDate();
+  return { min: k + '-01', max: k + '-' + pad(last) };
+}
+function opsFormHtml() {
+  const D = cur(), b = monthBounds(), k = ym(YEAR, view);
+  if (!opDate || opDate.slice(0, 7) !== k) {
+    const t = new Date();
+    opDate = (t.getFullYear() === YEAR && t.getMonth() === view) ? k + '-' + pad(t.getDate()) : b.min;
+  }
+  if (!D.lines.some(l => l.id === opLine)) opLine = (D.lines.find(l => l.g === 'expense') || D.lines[0] || {}).id || '';
+  let opts = '';
+  groups().forEach(g => {
+    const ls = D.lines.filter(l => l.g === g.k);
+    if (ls.length) opts += `<optgroup label="${esc(g.t)}">` + ls.map(l => `<option value="${l.id}"${l.id === opLine ? ' selected' : ''}>${esc(l.n || 'Без названия')}</option>`).join('') + '</optgroup>';
+  });
+  return '<div class="card sec" id="ops" style="margin-top:12px"><h3>Записи по дням</h3>' +
+    '<p class="note">Вносите траты и поступления по дате. Сумма прибавляется к выбранной строке в разделах ниже, к месячной сумме, если она там есть.</p>' +
+    '<div class="opf">' +
+    `<div class="of"><label for="opDate">Дата</label><input id="opDate" type="date" min="${b.min}" max="${b.max}" value="${opDate}"></div>` +
+    `<div class="of"><label for="opLine">Статья</label><select id="opLine">${opts}</select></div>` +
+    '<div class="of"><label for="opAmt">Сумма, ₽</label><input id="opAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>' +
+    '<div class="of"><label for="opNote">Заметка</label><input id="opNote" type="text" maxlength="60" placeholder="необязательно"></div></div>' +
+    '<button type="button" class="btn primary" id="opAdd" style="margin-top:12px">Добавить запись</button><div id="opsList"></div></div>';
+}
+function refreshOps() {
+  const el = $('opsList'); if (!el) return;
+  const D = cur(), k = ym(YEAR, view), names = {};
+  D.lines.forEach(l => { names[l.id] = l.n || 'Без названия'; });
+  const list = (D.ops[k] || []).filter(o => names[o.l]).slice().sort((a, b) => (b.d - a.d) || (b.t - a.t));
+  if (!list.length) { el.innerHTML = '<p class="pnote">Записей за этот месяц пока нет.</p>'; return; }
+  el.innerHTML = '<ul class="opl">' + list.map(o =>
+    `<li><span class="opd">${o.d} ${SHORT[view].toLowerCase()}</span><span class="opn">${esc(names[o.l])}${(o.n || (mode === 'family' && o.u)) ? `<small>${esc(o.n)}${o.n && mode === 'family' && o.u ? ' · ' : ''}${mode === 'family' && o.u ? 'внёс ' + esc(o.u) : ''}</small>` : ''}</span><b class="num">${money(o.a)}</b><button type="button" class="x" data-delop="${o.id}" aria-label="Удалить запись">×</button></li>`).join('') + '</ul>';
+}
+function addOp() {
+  const btn = $('opAdd'), k = ym(YEAR, view);
+  const a = parse($('opAmt').value), line = $('opLine').value, date = $('opDate').value, note = $('opNote').value.trim();
+  if (!(a > 0) || !line || !date || date.slice(0, 7) !== k) {
+    btn.textContent = 'Проверьте дату и сумму';
+    setTimeout(() => { if (btn.isConnected) btn.textContent = 'Добавить запись'; }, 2000);
+    return;
+  }
+  const d = parseInt(date.slice(8), 10), id = uid(), t = Date.now(), D = cur();
+  const u = ((user && user.email) || '').split('@')[0].slice(0, 30);
+  (D.ops[k] = D.ops[k] || []).push({ id, d, l: line, a, n: note, u, t });
+  fw(mode, 'm-' + k, { ops: { [id]: { d, l: line, a, n: note, u, t } } });
+  opDate = date; opLine = line;
+  renderMonth();
+  const amt = $('opAmt'); if (amt) amt.focus();
+}
+function delOp(id) {
+  const k = ym(YEAR, view), D = cur();
+  D.ops[k] = (D.ops[k] || []).filter(o => o.id !== id);
+  fw(mode, 'm-' + k, { ops: { [id]: { x: true } } });
+  renderMonth();
+}
+
 function renderMonth() {
   const D = cur(), fam = mode === 'family', k = ym(YEAR, view);
   let h = `<div class="mhead"><h2>${MONTHS[view]} ${YEAR}</h2><button type="button" class="btn" id="copyPrev">Взять суммы из прошлого месяца</button></div>`;
   h += '<div class="card" id="sum" style="margin-top:12px"></div>';
   h += '<div class="card sec" id="charts" style="margin-top:12px"></div>';
+  h += opsFormHtml();
   h += '<div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">';
   if (fam) {
     const c = num(D.contrib[k]);
@@ -332,7 +417,7 @@ function renderMonth() {
   lastSig = linesSig();
   refreshMonth();
 }
-function linesSig() { return mode + cur().lines.map(l => l.id + l.g + l.n).join('|'); }
+function linesSig() { return mode + cur().lines.map(l => l.id + l.g + l.n).join('|') + '#' + (cur().ops[ym(YEAR, view)] || []).length; }
 function sumHtml(s) {
   const fam = mode === 'family', rest = s.rest, den = Math.max(s.base, s.out);
   const neg = rest < 0, empty = (s.base === 0 && s.out === 0);
@@ -354,6 +439,7 @@ function refreshMonth() {
   const p = $('gt-pot'); if (p) p.textContent = money(s.src);
   $('sum').innerHTML = sumHtml(s);
   const ch = $('charts'); if (ch) ch.innerHTML = chartsHtml([ym(YEAR, view)], 'месяца');
+  refreshOps();
 }
 
 /* ---------- диаграммы доходов и расходов ---------- */
@@ -362,7 +448,7 @@ function collect(keys) {
   let wsav = 0, winv = 0, contrib = 0;
   D.lines.forEach(l => {
     const a = D.amt[l.id] || {};
-    let v = 0; keys.forEach(k => { v += num(a[k]); });
+    let v = 0; keys.forEach(k => { v += num(a[k]); (D.ops[k] || []).forEach(o => { if (o.l === l.id) v += o.a; }); });
     const n = l.n || 'Без названия';
     if (l.g === 'income') inc.push({ n, v });
     else if (l.g === 'expense') exp.push({ n, v });
@@ -517,6 +603,10 @@ document.addEventListener('input', e => {
     refreshYear();
   }
 });
+document.addEventListener('change', e => {
+  if (e.target.id === 'opDate') opDate = e.target.value;
+  else if (e.target.id === 'opLine') opLine = e.target.value;
+});
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('amt')) {
     const all = Array.prototype.slice.call(document.querySelectorAll('.amt')), i = all.indexOf(e.target);
@@ -549,6 +639,15 @@ document.addEventListener('click', e => {
     if (mode === 'family' && D.contrib[pk] && !D.contrib[k]) { setContrib(k, D.contrib[pk]); n++; }
     if (n) renderMonth();
     else { el.textContent = 'Нечего копировать'; setTimeout(() => { if (el.isConnected) el.textContent = 'Взять суммы из прошлого месяца'; }, 2000); }
+    return;
+  }
+  if (el.id === 'opAdd') { addOp(); return; }
+  if (el.dataset.delop) {
+    if (el.dataset.armed) { delOp(el.dataset.delop); }
+    else {
+      el.dataset.armed = '1'; el.textContent = 'Удалить?'; el.classList.add('armed');
+      setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = '×'; el.classList.remove('armed'); } }, 2500);
+    }
     return;
   }
   if (el.dataset.add) {
