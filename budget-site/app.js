@@ -2,18 +2,24 @@ import { firebaseConfig, SDK_BASE } from './config.js';
 
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+const WSAV = { k: 'wsav', t: 'Снято с накоплений', add: 'Добавить снятие', nw: 'На что снято', wd: 1,
+  note: 'Деньги из накоплений, которые ушли на расходы. Они уменьшают накопления и пополняют деньги месяца.' };
+const WINV = { k: 'winv', t: 'Снято с инвестиций', add: 'Добавить снятие', nw: 'На что снято', wd: 1,
+  note: 'Деньги из инвестиций, которые ушли на расходы. Они уменьшают инвестиции и пополняют деньги месяца.' };
 const GP = [
   { k: 'income', t: 'Доходы', add: 'Добавить доход', nw: 'Новый доход' },
   { k: 'expense', t: 'Расходы', add: 'Добавить статью расходов', nw: 'Новая статья' },
   { k: 'saving', t: 'Накопления', add: 'Добавить накопление', nw: 'Новая цель' },
-  { k: 'invest', t: 'Инвестиции', add: 'Добавить вложение', nw: 'Новый актив' }
+  { k: 'invest', t: 'Инвестиции', add: 'Добавить вложение', nw: 'Новый актив' },
+  WSAV, WINV
 ];
 const GF = [
   { k: 'expense', t: 'Общие расходы', add: 'Добавить статью расходов', nw: 'Новая статья' },
   { k: 'saving', t: 'Общие накопления', add: 'Добавить накопление', nw: 'Новая цель' },
-  { k: 'invest', t: 'Общие инвестиции', add: 'Добавить вложение', nw: 'Новый актив' }
+  { k: 'invest', t: 'Общие инвестиции', add: 'Добавить вложение', nw: 'Новый актив' },
+  WSAV, WINV
 ];
-const SHORTG = { income: 'Доходы', expense: 'Расходы', saving: 'Накопления', invest: 'Инвестиции' };
+const SHORTG = { income: 'Доходы', expense: 'Расходы', saving: 'Накопления', invest: 'Инвестиции', wsav: 'Снято с накоплений', winv: 'Снято с инвестиций' };
 const DEF = {
   family: [
     { id: 'f-exp1', g: 'expense', n: 'Жильё и коммунальные', t: 1 }, { id: 'f-exp2', g: 'expense', n: 'Продукты', t: 2 },
@@ -134,7 +140,7 @@ function setRate(field, val) {
 
 /* ---------- чтение ---------- */
 function applySnap(m, snap) {
-  const allowed = m === 'family' ? ['expense', 'saving', 'invest'] : ['income', 'expense', 'saving', 'invest'];
+  const allowed = m === 'family' ? ['expense', 'saving', 'invest', 'wsav', 'winv'] : ['income', 'expense', 'saving', 'invest', 'wsav', 'winv'];
   const lines = [], amt = {}, contrib = {}, open = {}, rate = { sav: 0, inv: 0 };
   let meta = false;
   snap.docs.forEach(d => {
@@ -196,9 +202,11 @@ window.addEventListener('offline', showSync);
 
 /* ---------- расчёты ---------- */
 function sums(k) {
-  const D = cur(), s = { income: 0, expense: 0, saving: 0, invest: 0 };
+  const D = cur(), s = { income: 0, expense: 0, saving: 0, invest: 0, wsav: 0, winv: 0 };
   D.lines.forEach(l => { const a = D.amt[l.id]; if (a) s[l.g] += num(a[k]); });
-  if (mode === 'family') { s.contrib = num(D.contrib[k]); s.base = s.contrib * 2; } else { s.base = s.income; }
+  if (mode === 'family') { s.contrib = num(D.contrib[k]); s.src = s.contrib * 2; } else { s.src = s.income; }
+  s.wd = s.wsav + s.winv;               // снято с накоплений и инвестиций
+  s.base = s.src + s.wd;                // все деньги месяца
   s.out = s.expense + s.saving + s.invest;
   s.rest = s.base - s.out;
   return s;
@@ -222,15 +230,17 @@ function calcYear(y, d) {
   d = d || 0;
   const D = cur(), op = getOpen(y, d);
   let cs = op.sav, ci = op.inv, gs = 0, gi = 0, active = 0;
-  const rs = D.rate.sav / 1200, ri = D.rate.inv / 1200, rows = [], T = { base: 0, expense: 0, saving: 0, invest: 0 };
+  const rs = D.rate.sav / 1200, ri = D.rate.inv / 1200, rows = [];
+  const T = { src: 0, wd: 0, wsav: 0, winv: 0, base: 0, expense: 0, saving: 0, invest: 0 };
   for (let m = 0; m < 12; m++) {
     const s = sums(ym(y, m));
     gs += cs * rs; gi += ci * ri;
-    cs = cs * (1 + rs) + s.saving; ci = ci * (1 + ri) + s.invest;
+    cs = cs * (1 + rs) + s.saving - s.wsav;
+    ci = ci * (1 + ri) + s.invest - s.winv;
     s.cap = cs + ci;
     s.on = (s.base || s.expense || s.saving || s.invest) ? 1 : 0;
     active += s.on;
-    T.base += s.base; T.expense += s.expense; T.saving += s.saving; T.invest += s.invest;
+    ['src', 'wd', 'wsav', 'winv', 'base', 'expense', 'saving', 'invest'].forEach(f => { T[f] += s[f]; });
     rows.push(s);
   }
   T.rest = T.base - T.expense - T.saving - T.invest;
@@ -293,9 +303,10 @@ function renderMonth() {
       '<p class="pnote">Вы вносите поровну. Сумма двух взносов идёт на общие расходы, накопления и инвестиции.</p></section>';
   }
   groups().forEach(g => {
-    h += `<section class="grp"><div class="ghead"><span class="dot ${g.k}"></span><h3>${g.t}</h3><span class="gtot num" id="gt-${g.k}"></span></div><div>`;
+    const dot = g.wd ? '<span class="dot" style="background:var(--muted)"></span>' : `<span class="dot ${g.k}"></span>`;
+    h += `<section class="grp"><div class="ghead">${dot}<h3>${g.t}</h3><span class="gtot num" id="gt-${g.k}"></span></div><div>`;
     D.lines.forEach(l => { if (l.g === g.k) h += rowHtml(l, k); });
-    h += `</div><button type="button" class="add" data-add="${g.k}">+ ${g.add}</button></section>`;
+    h += `</div><button type="button" class="add" data-add="${g.k}">+ ${g.add}</button>${g.note ? `<p class="pnote">${g.note}</p>` : ''}</section>`;
   });
   h += '</div>';
   $('view').innerHTML = h;
@@ -307,20 +318,21 @@ function sumHtml(s) {
   const fam = mode === 'family', rest = s.rest, den = Math.max(s.base, s.out);
   const neg = rest < 0, empty = (s.base === 0 && s.out === 0);
   const hint = empty ? (fam ? 'Впишите взнос и общие траты месяца' : 'Впишите доходы и расходы месяца')
-    : (neg ? (fam ? 'Общих трат больше, чем в общем бюджете' : 'Расходов и отложенного больше, чем дохода')
+    : (neg ? (fam ? 'Трат и отложенного больше, чем денег месяца' : 'Расходов и отложенного больше, чем денег месяца')
       : (fam ? 'Не потрачено и не отложено' : 'Не распределено'));
   const w = v => den > 0 ? (v / den * 100).toFixed(2) : 0;
   let h = `<div class="bal${neg ? ' neg' : ''}"><div><span class="lbl">${fam ? 'Остаток общего бюджета' : 'Остаток месяца'}</span><strong class="num big">${money(rest)}</strong><span class="hint">${hint}</span></div>` +
-    `<div class="rate"><span class="lbl">Отложено</span><strong class="num">${s.base > 0 ? pct((s.saving + s.invest) / s.base) : '—'}</strong><span class="hint">${fam ? 'от общего бюджета' : 'от дохода'}</span></div></div>`;
+    `<div class="rate"><span class="lbl">Отложено</span><strong class="num">${s.src > 0 ? pct((s.saving + s.invest) / s.src) : '—'}</strong><span class="hint">${fam ? 'от общего бюджета' : 'от дохода'}</span></div></div>`;
   h += `<div class="split" role="img" aria-label="Куда ушли деньги"><i style="width:${w(s.expense)}%;background:var(--c-expense)"></i><i style="width:${w(s.saving)}%;background:var(--c-saving)"></i><i style="width:${w(s.invest)}%;background:var(--c-invest)"></i></div>`;
-  h += `<div class="legend"><div><span class="dot ${fam ? 'pot' : 'income'}"></span>${fam ? 'Общий бюджет' : 'Доходы'}<b class="num">${money(s.base)}</b></div>`;
+  h += `<div class="legend"><div><span class="dot ${fam ? 'pot' : 'income'}"></span>${fam ? 'Общий бюджет' : 'Доходы'}<b class="num">${money(s.src)}</b></div>`;
   ['expense', 'saving', 'invest'].forEach(g => { h += `<div><span class="dot ${g}"></span>${SHORTG[g]}<b class="num">${money(s[g])}</b></div>`; });
+  ['wsav', 'winv'].forEach(g => { h += `<div><span class="dot" style="background:var(--muted)"></span>${SHORTG[g]}<b class="num">${money(s[g])}</b></div>`; });
   return h + '</div>';
 }
 function refreshMonth() {
   const s = sums(ym(YEAR, view));
   groups().forEach(g => { const e = $('gt-' + g.k); if (e) e.textContent = money(s[g.k]); });
-  const p = $('gt-pot'); if (p) p.textContent = money(s.base);
+  const p = $('gt-pot'); if (p) p.textContent = money(s.src);
   $('sum').innerHTML = sumHtml(s);
 }
 
@@ -354,7 +366,7 @@ function chartSvg(c) {
     const cx = L + slot * i + slot / 2, x = cx - bw / 2;
     let base = 0;
     const parts = [['b-exp', r.expense], ['b-sav', r.saving], ['b-inv', r.invest]];
-    const tip = `${SHORT[i]}: ${bl} ${money(r.base)}, расходы ${money(r.expense)}, накопления ${money(r.saving)}, инвестиции ${money(r.invest)}`;
+    const tip = `${SHORT[i]}: ${bl} ${money(r.src)}, снято ${money(r.wd)}, расходы ${money(r.expense)}, накопления ${money(r.saving)}, инвестиции ${money(r.invest)}`;
     s += `<g><title>${esc(tip)}</title>`;
     parts.forEach(p => {
       if (p[1] <= 0) return;
@@ -373,24 +385,27 @@ function cell(v, cls) {
 function yearOut() {
   const fam = mode === 'family', c = calcYear(YEAR), T = c.T, n = c.n;
   const st = (cls, lbl, val, sub, neg) => `<div class="stat"><span class="lbl">${cls ? `<span class="dot ${cls}"></span>` : ''}${lbl}</span><strong class="num val${neg ? ' neg' : ''}">${money(val)}</strong><span class="sub">${sub}</span></div>`;
+  const cap = c.end.sav + c.end.inv;
   let h = '<div class="stats">' +
-    (fam ? st('pot', 'Общий бюджет', T.base, 'по ' + money(T.base / 2) + ' от каждого') : st('income', 'Доходы', T.base, 'в среднем ' + money(T.base / n) + ' в месяц')) +
+    (fam ? st('pot', 'Общий бюджет', T.src, 'по ' + money(T.src / 2) + ' от каждого') : st('income', 'Доходы', T.src, 'в среднем ' + money(T.src / n) + ' в месяц')) +
     st('expense', fam ? 'Общие расходы' : 'Расходы', T.expense, 'в среднем ' + money(T.expense / n) + ' в месяц') +
-    st('', 'Отложено', T.saving + T.invest, T.base > 0 ? pct((T.saving + T.invest) / T.base) + (fam ? ' общего бюджета' : ' дохода') : 'нет данных') +
-    st('', fam ? 'Остаток общего' : 'Остаток за год', T.rest, T.rest < 0 ? 'перерасход' : (fam ? 'не потрачено и не отложено' : 'не распределено'), T.rest < 0) + '</div>';
+    st('', 'Отложено', T.saving + T.invest, T.src > 0 ? pct((T.saving + T.invest) / T.src) + (fam ? ' общего бюджета' : ' дохода') : 'нет данных') +
+    st('', 'Снято с накоплений', T.wd, 'накопления ' + money(T.wsav) + ', инвестиции ' + money(T.winv)) +
+    st('', fam ? 'Остаток общего' : 'Остаток за год', T.rest, T.rest < 0 ? 'перерасход' : (fam ? 'не потрачено и не отложено' : 'не распределено'), T.rest < 0) +
+    st('', 'Накопления и инвестиции', cap, 'на конец года', cap < 0) + '</div>';
   h += `<section class="card sec chart"><h3>${fam ? 'Куда уходит общий бюджет' : 'Куда уходит доход'}</h3><div>${chartSvg(c)}</div><div class="legend">` +
     '<div><span class="dot expense"></span>Расходы</div><div><span class="dot saving"></span>Накопления</div><div><span class="dot invest"></span>Инвестиции</div>' +
-    `<div><span class="dot" style="background:var(--fg);height:3px;border-radius:2px;width:14px"></span>${fam ? 'Общий бюджет' : 'Доход'}</div></div></section>`;
-  h += `<section class="card sec"><h3>По месяцам</h3><div class="scroll"><table><thead><tr><th>Месяц</th><th>${fam ? 'Общий бюджет' : 'Доход'}</th><th>Расходы</th><th>Накопл.</th><th>Инвест.</th><th>Остаток</th><th>Капитал</th></tr></thead><tbody>`;
+    `<div><span class="dot" style="background:var(--fg);height:3px;border-radius:2px;width:14px"></span>${fam ? 'Бюджет' : 'Доход'} и снятия</div></div></section>`;
+  h += `<section class="card sec"><h3>По месяцам</h3><div class="scroll"><table><thead><tr><th>Месяц</th><th>${fam ? 'Общий бюджет' : 'Доход'}</th><th>Снято</th><th>Расходы</th><th>Накопл.</th><th>Инвест.</th><th>Остаток</th><th>Капитал</th></tr></thead><tbody>`;
   c.rows.forEach((r, i) => {
-    h += `<tr><td>${MONTHS[i]}</td>${cell(r.base)}${cell(r.expense)}${cell(r.saving)}${cell(r.invest)}${cell(r.on ? r.rest : 0)}<td class="num">${money(r.cap)}</td></tr>`;
+    h += `<tr><td>${MONTHS[i]}</td>${cell(r.src)}${cell(r.wd)}${cell(r.expense)}${cell(r.saving)}${cell(r.invest)}${cell(r.on ? r.rest : 0)}${cell(r.cap)}</tr>`;
   });
-  h += `</tbody><tfoot><tr><td>Итого</td>${cell(T.base)}${cell(T.expense)}${cell(T.saving)}${cell(T.invest)}${cell(T.rest)}<td class="num">${money(c.end.sav + c.end.inv)}</td></tr></tfoot></table></div></section>`;
+  h += `</tbody><tfoot><tr><td>Итого</td>${cell(T.src)}${cell(T.wd)}${cell(T.expense)}${cell(T.saving)}${cell(T.invest)}${cell(T.rest)}${cell(cap)}</tr></tfoot></table></div></section>`;
   const gS = c.growth.sav, gI = c.growth.inv;
-  h += `<section class="card sec"><h3>Капитал на конец года</h3><p class="note">${fam ? 'Общие накопления' : 'Накопления'} и инвестиции: сколько было на 1 января, сколько добавлено и сколько прибавила доходность.</p><div class="scroll"><table><thead><tr><th></th><th>Было</th><th>Взносы</th><th>Доходность</th><th>Стало</th></tr></thead><tbody>` +
-    `<tr><td>Накопления</td>${cell(c.op.sav)}${cell(T.saving)}${cell(gS)}<td class="num">${money(c.end.sav)}</td></tr>` +
-    `<tr><td>Инвестиции</td>${cell(c.op.inv)}${cell(T.invest)}${cell(gI)}<td class="num">${money(c.end.inv)}</td></tr></tbody>` +
-    `<tfoot><tr><td>Всего</td>${cell(c.op.sav + c.op.inv)}${cell(T.saving + T.invest)}${cell(gS + gI)}<td class="num">${money(c.end.sav + c.end.inv)}</td></tr></tfoot></table></div></section>`;
+  h += `<section class="card sec"><h3>Капитал на конец года</h3><p class="note">${fam ? 'Общие накопления' : 'Накопления'} и инвестиции: сколько было на 1 января, сколько добавлено, сколько снято и сколько прибавила доходность.</p><div class="scroll"><table><thead><tr><th></th><th>Было</th><th>Взносы</th><th>Снято</th><th>Доходность</th><th>Стало</th></tr></thead><tbody>` +
+    `<tr><td>Накопления</td>${cell(c.op.sav)}${cell(T.saving)}${cell(-T.wsav)}${cell(gS)}${cell(c.end.sav)}</tr>` +
+    `<tr><td>Инвестиции</td>${cell(c.op.inv)}${cell(T.invest)}${cell(-T.winv)}${cell(gI)}${cell(c.end.inv)}</tr></tbody>` +
+    `<tfoot><tr><td>Всего</td>${cell(c.op.sav + c.op.inv)}${cell(T.saving + T.invest)}${cell(-T.wd)}${cell(gS + gI)}${cell(cap)}</tr></tfoot></table></div></section>`;
   return h;
 }
 function renderYear() {
