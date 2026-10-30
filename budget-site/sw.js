@@ -1,6 +1,6 @@
 // Service worker: хранит приложение на телефоне, чтобы оно открывалось без интернета.
 // После изменения любого файла сайта увеличьте число в VERSION, тогда телефоны скачают новую версию.
-const VERSION = 'budget-v2';
+const VERSION = 'budget-v3';
 const SHELL = ['./', 'index.html', 'app.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

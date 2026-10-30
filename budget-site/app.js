@@ -36,6 +36,24 @@ const DEF = {
   ]
 };
 const MODEKEY = 'moi-byudzhet-mode';
+const PAL = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '#b07aa1', '#ff9da7'];
+(function addCss() {
+  const st = document.createElement('style');
+  st.textContent = `
+.donuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.donut{min-width:0}
+.donut h4{margin:0 0 8px;font-family:var(--f-display);font-size:1rem}
+.donut svg{display:block;width:100%;max-width:190px;margin:0 auto}
+.donut .tot{fill:var(--fg);font:600 11px var(--f-num);text-anchor:middle}
+.dl{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.dl li{display:flex;align-items:center;gap:8px;font-size:.85rem;min-width:0}
+.dl .nmx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl b{font-family:var(--f-num);font-weight:500;white-space:nowrap}
+.dl em{font-style:normal;color:var(--muted);font-size:.78rem;min-width:2.8em;text-align:right}
+.dl i{flex:0 0 auto;width:10px;height:10px;border-radius:2px;display:inline-block}
+@media (max-width:560px){.donuts{grid-template-columns:minmax(0,1fr)}}`;
+  document.head.appendChild(st);
+})();
 
 const now = new Date();
 let YEAR = now.getFullYear();
@@ -294,6 +312,7 @@ function renderMonth() {
   const D = cur(), fam = mode === 'family', k = ym(YEAR, view);
   let h = `<div class="mhead"><h2>${MONTHS[view]} ${YEAR}</h2><button type="button" class="btn" id="copyPrev">Взять суммы из прошлого месяца</button></div>`;
   h += '<div class="card" id="sum" style="margin-top:12px"></div>';
+  h += '<div class="card sec" id="charts" style="margin-top:12px"></div>';
   h += '<div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">';
   if (fam) {
     const c = num(D.contrib[k]);
@@ -334,6 +353,49 @@ function refreshMonth() {
   groups().forEach(g => { const e = $('gt-' + g.k); if (e) e.textContent = money(s[g.k]); });
   const p = $('gt-pot'); if (p) p.textContent = money(s.src);
   $('sum').innerHTML = sumHtml(s);
+  const ch = $('charts'); if (ch) ch.innerHTML = chartsHtml([ym(YEAR, view)], 'месяца');
+}
+
+/* ---------- диаграммы доходов и расходов ---------- */
+function collect(keys) {
+  const D = cur(), inc = [], exp = [];
+  let wsav = 0, winv = 0, contrib = 0;
+  D.lines.forEach(l => {
+    const a = D.amt[l.id] || {};
+    let v = 0; keys.forEach(k => { v += num(a[k]); });
+    const n = l.n || 'Без названия';
+    if (l.g === 'income') inc.push({ n, v });
+    else if (l.g === 'expense') exp.push({ n, v });
+    else if (l.g === 'wsav') wsav += v;
+    else if (l.g === 'winv') winv += v;
+  });
+  if (mode === 'family') { keys.forEach(k => { contrib += num(D.contrib[k]) * 2; }); inc.push({ n: 'Взносы двоих', v: contrib }); }
+  inc.push({ n: 'Снято с накоплений', v: wsav }, { n: 'Снято с инвестиций', v: winv });
+  return { inc, exp };
+}
+function donut(title, items) {
+  let list = items.filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  if (list.length > 8) {
+    const rest = list.slice(7).reduce((t, x) => t + x.v, 0);
+    list = list.slice(0, 7); list.push({ n: 'Остальное', v: rest, grey: 1 });
+  }
+  const total = list.reduce((t, x) => t + x.v, 0);
+  if (!total) return `<div class="donut"><h4>${title}</h4><p class="pnote">Пока нет данных.</p></div>`;
+  const R = 40, C = 2 * Math.PI * R;
+  let acc = 0, svg = `<svg viewBox="0 0 120 120" role="img" aria-label="${title}">`, ul = '<ul class="dl">';
+  list.forEach((x, i) => {
+    const col = x.grey ? '#8a93a5' : PAL[i % PAL.length];
+    const len = x.v / total * C, seg = Math.max(len - 1, 0.01);
+    svg += `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 60 60)"><title>${esc(x.n)}: ${money(x.v)}</title></circle>`;
+    acc += len;
+    ul += `<li><i style="background:${col}"></i><span class="nmx">${esc(x.n)}</span><em>${pct(x.v / total)}</em><b>${money(x.v)}</b></li>`;
+  });
+  svg += `<text class="tot" x="60" y="64">${compact(total)} ₽</text></svg>`;
+  return `<div class="donut"><h4>${title}</h4>${svg}${ul}</ul></div>`;
+}
+function chartsHtml(keys, label) {
+  const c = collect(keys);
+  return `<h3>Доходы и расходы ${label}</h3><div class="donuts">${donut(mode === 'family' ? 'Откуда деньги' : 'Доходы', c.inc)}${donut(mode === 'family' ? 'Общие расходы' : 'Расходы', c.exp)}</div>`;
 }
 
 /* ---------- год ---------- */
@@ -396,6 +458,8 @@ function yearOut() {
   h += `<section class="card sec chart"><h3>${fam ? 'Куда уходит общий бюджет' : 'Куда уходит доход'}</h3><div>${chartSvg(c)}</div><div class="legend">` +
     '<div><span class="dot expense"></span>Расходы</div><div><span class="dot saving"></span>Накопления</div><div><span class="dot invest"></span>Инвестиции</div>' +
     `<div><span class="dot" style="background:var(--fg);height:3px;border-radius:2px;width:14px"></span>${fam ? 'Бюджет' : 'Доход'} и снятия</div></div></section>`;
+  const allKeys = []; for (let m = 0; m < 12; m++) allKeys.push(ym(YEAR, m));
+  h += `<section class="card sec">${chartsHtml(allKeys, 'за год')}</section>`;
   h += `<section class="card sec"><h3>По месяцам</h3><div class="scroll"><table><thead><tr><th>Месяц</th><th>${fam ? 'Общий бюджет' : 'Доход'}</th><th>Снято</th><th>Расходы</th><th>Накопл.</th><th>Инвест.</th><th>Остаток</th><th>Капитал</th></tr></thead><tbody>`;
   c.rows.forEach((r, i) => {
     h += `<tr><td>${MONTHS[i]}</td>${cell(r.src)}${cell(r.wd)}${cell(r.expense)}${cell(r.saving)}${cell(r.invest)}${cell(r.on ? r.rest : 0)}${cell(r.cap)}</tr>`;
