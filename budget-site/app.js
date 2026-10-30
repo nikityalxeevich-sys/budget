@@ -7,8 +7,8 @@ const WSAV = { k: 'wsav', t: 'Снято с накоплений', add: 'Доб�
 const WINV = { k: 'winv', t: 'Снято с инвестиций', add: 'Добавить снятие', nw: 'На что снято', wd: 1,
   note: 'Деньги из инвестиций, которые ушли на расходы. Они уменьшают инвестиции и пополняют деньги месяца.' };
 const GP = [
-  { k: 'income', t: 'Доходы', add: 'Добавить доход', nw: 'Новый доход' },
   { k: 'expense', t: 'Расходы', add: 'Добавить статью расходов', nw: 'Новая статья' },
+  { k: 'income', t: 'Доходы', add: 'Добавить доход', nw: 'Новый доход' },
   { k: 'saving', t: 'Накопления', add: 'Добавить накопление', nw: 'Новая цель' },
   { k: 'invest', t: 'Инвестиции', add: 'Добавить вложение', nw: 'Новый актив' },
   WSAV, WINV
@@ -36,7 +36,19 @@ const DEF = {
   ]
 };
 const MODEKEY = 'moi-byudzhet-mode';
-const PAL = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '#b07aa1', '#ff9da7'];
+const PALI = ['#1f9d7a', '#2bb3c0', '#6cc17b', '#3f8fd2', '#8ac9a0', '#50c9b0', '#7aa6d8', '#9bd36b']; // доходы: зелёные и бирюзовые
+const PALE = ['#d9534f', '#f08a3c', '#e5b13a', '#c4467a', '#a8553f', '#f2706b', '#b8774a', '#e98fb0']; // расходы: тёплые
+const GCOL = { income: 'var(--c-income)', expense: 'var(--c-expense)', saving: 'var(--c-saving)', invest: 'var(--c-invest)', wsav: 'var(--muted)', winv: 'var(--muted)' };
+const GICON = {
+  income: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  expense: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  saving: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+  invest: '<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
+  wsav: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+  winv: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'
+};
+function gicon(k) { return `<span class="gi"><svg viewBox="0 0 24 24" aria-hidden="true">${GICON[k] || ''}</svg></span>`; }
+function gcolor(id) { const l = (typeof cur === 'function' ? cur() : { lines: [] }).lines.find(x => x.id === id); return GCOL[l ? l.g : 'expense']; }
 (function addCss() {
   const st = document.createElement('style');
   st.textContent = `
@@ -58,11 +70,34 @@ const PAL = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '
 .of input,.of select{width:100%;min-width:0;min-height:44px;font:inherit;font-size:16px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .of input{-webkit-appearance:none;appearance:none}
 .opl{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column}
-.opl li{display:grid;grid-template-columns:3.8em minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.opl li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .opd{color:var(--muted);font-size:.85rem}
 .opn{min-width:0;overflow-wrap:anywhere}
 .opn small{display:block;color:var(--muted);font-size:.78rem}
-@media (max-width:420px){.opf{grid-template-columns:minmax(0,1fr)}}`;
+@media (max-width:420px){.opf{grid-template-columns:minmax(0,1fr)}}
+.qstat{font-size:.85rem;color:var(--muted);margin-bottom:10px}
+.qstat b{color:var(--fg);font-weight:500}
+.bigamt{width:100%;min-width:0;box-sizing:border-box;font-family:var(--f-num);font-weight:600;font-size:1.9rem;text-align:center;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.chip{min-height:42px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:.92rem}
+.chip:hover{background:var(--surface2)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+.qd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.qd .btn{min-height:44px}
+.qd input{flex:1 1 9em;min-width:0;min-height:44px;font:inherit;font-size:16px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;-webkit-appearance:none;appearance:none}
+.qd .btn.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+.dh{display:flex;justify-content:space-between;gap:8px;margin-top:16px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.dh b{font-family:var(--f-num);font-weight:500;letter-spacing:0;text-transform:none;color:var(--fg)}
+.opl .pl{color:var(--c-income)}
+.opl .mn{color:var(--c-expense)}
+.g-income{--gc:var(--c-income)}.g-expense{--gc:var(--c-expense)}.g-saving{--gc:var(--c-saving)}.g-invest{--gc:var(--c-invest)}.g-wsav,.g-winv{--gc:var(--muted)}
+.gi{flex:0 0 auto;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--gc);background:var(--surface2)}
+@supports (background:color-mix(in srgb,red 10%,blue)){.gi{background:color-mix(in srgb,var(--gc) 16%,transparent)}}
+.gi svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.grp .gtot{color:var(--gc)}
+.rbar{height:3px;background:var(--surface2);border-radius:2px;margin:0 2px 6px;overflow:hidden}
+.rbar i{display:block;height:100%;width:0;background:var(--gc);border-radius:2px}
+.chips .chip.on{background:var(--c-expense);border-color:var(--c-expense);color:var(--accent-fg)}`;
   document.head.appendChild(st);
 })();
 
@@ -330,7 +365,7 @@ function rowBase(l, k) {
 }
 function rowHtml(l, k) {
   const sub = (cur().ops[k] || []).reduce((t, o) => t + (o.l === l.id ? o.a : 0), 0);
-  return rowBase(l, k) + (sub ? `<p class="pnote" style="margin:0 0 6px 2px">Из записей по дням: ${money(sub)}</p>` : '');
+  return rowBase(l, k) + `<div class="rbar" data-bar="${l.id}"><i></i></div>` + (sub ? `<p class="pnote" style="margin:0 0 6px 2px">Из записей по дням: ${money(sub)}</p>` : '');
 }
 
 /* ---------- записи по дням ---------- */
@@ -339,49 +374,75 @@ function monthBounds() {
   const k = ym(YEAR, view), last = new Date(YEAR, view + 1, 0).getDate();
   return { min: k + '-01', max: k + '-' + pad(last) };
 }
+const WDAY = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 function opsFormHtml() {
-  const D = cur(), b = monthBounds(), k = ym(YEAR, view);
-  if (!opDate || opDate.slice(0, 7) !== k) {
-    const t = new Date();
-    opDate = (t.getFullYear() === YEAR && t.getMonth() === view) ? k + '-' + pad(t.getDate()) : b.min;
-  }
-  if (!D.lines.some(l => l.id === opLine)) opLine = (D.lines.find(l => l.g === 'expense') || D.lines[0] || {}).id || '';
-  let opts = '';
-  groups().forEach(g => {
+  const D = cur(), b = monthBounds(), k = ym(YEAR, view), t = new Date();
+  const isCur = (t.getFullYear() === YEAR && t.getMonth() === view);
+  if (!opDate || opDate.slice(0, 7) !== k) opDate = isCur ? k + '-' + pad(t.getDate()) : b.min;
+  const exp = D.lines.filter(l => l.g === 'expense');
+  if (!D.lines.some(l => l.id === opLine)) opLine = (exp[0] || D.lines[0] || {}).id || '';
+  const chips = exp.map(l => `<button type="button" class="chip${l.id === opLine ? ' on' : ''}" data-chip="${l.id}">${esc(l.n || 'Без названия')}</button>`).join('');
+  const other = groups().filter(g => g.k !== 'expense').map(g => {
     const ls = D.lines.filter(l => l.g === g.k);
-    if (ls.length) opts += `<optgroup label="${esc(g.t)}">` + ls.map(l => `<option value="${l.id}"${l.id === opLine ? ' selected' : ''}>${esc(l.n || 'Без названия')}</option>`).join('') + '</optgroup>';
-  });
-  return '<div class="card sec" id="ops" style="margin-top:12px"><h3>Записи по дням</h3>' +
-    '<p class="note">Вносите траты и поступления по дате. Сумма прибавляется к выбранной строке в разделах ниже, к месячной сумме, если она там есть.</p>' +
-    '<div class="opf">' +
-    `<div class="of"><label for="opDate">Дата</label><input id="opDate" type="date" min="${b.min}" max="${b.max}" value="${opDate}"></div>` +
-    `<div class="of"><label for="opLine">Статья</label><select id="opLine">${opts}</select></div>` +
-    '<div class="of"><label for="opAmt">Сумма, ₽</label><input id="opAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="0"></div>' +
-    '<div class="of"><label for="opNote">Заметка</label><input id="opNote" type="text" maxlength="60" placeholder="необязательно"></div></div>' +
-    '<button type="button" class="btn primary" id="opAdd" style="margin-top:12px">Добавить запись</button><div id="opsList"></div></div>';
+    return ls.length ? `<optgroup label="${esc(g.t)}">` + ls.map(l => `<option value="${l.id}"${l.id === opLine ? ' selected' : ''}>${esc(l.n || 'Без названия')}</option>`).join('') + '</optgroup>' : '';
+  }).join('');
+  const today = isCur ? k + '-' + pad(t.getDate()) : '';
+  const yest = (isCur && t.getDate() > 1) ? k + '-' + pad(t.getDate() - 1) : '';
+  return '<div class="card sec" id="ops">' +
+    `<h3>${mode === 'family' ? 'Общая трата за день' : 'Добавить за день'}</h3><div class="qstat" id="opStat"></div>` +
+    '<input class="bigamt" id="opAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="0 ₽" aria-label="Сумма">' +
+    `<div class="chips" id="opChips">${chips || '<span class="pnote">Добавьте статью расходов в разделе «Расходы» ниже.</span>'}</div>` +
+    `<div class="of"><label for="opOther">Другая статья: доход, накопления, снятия</label><select id="opOther"><option value="">не выбрано</option>${other}</select></div>` +
+    '<div class="qd">' +
+    (today ? `<button type="button" class="btn${opDate === today ? ' on' : ''}" data-qd="${today}">Сегодня</button>` : '') +
+    (yest ? `<button type="button" class="btn${opDate === yest ? ' on' : ''}" data-qd="${yest}">Вчера</button>` : '') +
+    `<input id="opDate" type="date" min="${b.min}" max="${b.max}" value="${opDate}" aria-label="Дата"></div>` +
+    '<div class="of"><label for="opNote">Заметка</label><input id="opNote" type="text" maxlength="60" placeholder="необязательно"></div>' +
+    `<button type="button" class="btn primary" id="opAdd" style="margin-top:12px;width:100%;min-height:46px;background:${gcolor(opLine)};border-color:${gcolor(opLine)};color:var(--accent-fg)">Добавить</button><div id="opsList"></div></div>`;
 }
 function refreshOps() {
   const el = $('opsList'); if (!el) return;
-  const D = cur(), k = ym(YEAR, view), names = {};
-  D.lines.forEach(l => { names[l.id] = l.n || 'Без названия'; });
+  const D = cur(), k = ym(YEAR, view), names = {}, grp = {};
+  D.lines.forEach(l => { names[l.id] = l.n || 'Без названия'; grp[l.id] = l.g; });
   const list = (D.ops[k] || []).filter(o => names[o.l]).slice().sort((a, b) => (b.d - a.d) || (b.t - a.t));
+  // сводка над формой
+  const t = new Date(), isCur = (t.getFullYear() === YEAR && t.getMonth() === view);
+  const dim = new Date(YEAR, view + 1, 0).getDate(), passed = isCur ? t.getDate() : dim;
+  const s = sums(k), st = $('opStat');
+  if (st) {
+    const today = isCur ? list.reduce((x, o) => x + (o.d === t.getDate() && grp[o.l] === 'expense' ? o.a : 0), 0) : 0;
+    st.innerHTML = (isCur ? `Сегодня потрачено <b class="num">${money(today)}</b> · ` : '') +
+      `в среднем в день <b class="num">${money(s.expense / Math.max(passed, 1))}</b>`;
+  }
   if (!list.length) { el.innerHTML = '<p class="pnote">Записей за этот месяц пока нет.</p>'; return; }
-  el.innerHTML = '<ul class="opl">' + list.map(o =>
-    `<li><span class="opd">${o.d} ${SHORT[view].toLowerCase()}</span><span class="opn">${esc(names[o.l])}${(o.n || (mode === 'family' && o.u)) ? `<small>${esc(o.n)}${o.n && mode === 'family' && o.u ? ' · ' : ''}${mode === 'family' && o.u ? 'внёс ' + esc(o.u) : ''}</small>` : ''}</span><b class="num">${money(o.a)}</b><button type="button" class="x" data-delop="${o.id}" aria-label="Удалить запись">×</button></li>`).join('') + '</ul>';
+  const days = [];
+  list.forEach(o => { let g = days.find(x => x.d === o.d); if (!g) { g = { d: o.d, items: [] }; days.push(g); } g.items.push(o); });
+  days.forEach(g => g.items.sort((a, b) => ((grp[a.l] === 'expense' ? 0 : 1) - (grp[b.l] === 'expense' ? 0 : 1)) || (b.t - a.t)));
+  const sign = { expense: '−', income: '+', wsav: '+', winv: '+' };
+  el.innerHTML = days.map(g => {
+    const tot = g.items.reduce((x, o) => x + (grp[o.l] === 'expense' ? o.a : 0), 0);
+    return `<div class="dh"><span>${g.d} ${MONTHS[view].toLowerCase()}, ${WDAY[new Date(YEAR, view, g.d).getDay()]}</span>${tot ? `<b>−${money(tot)}</b>` : ''}</div><ul class="opl">` +
+      g.items.map(o => {
+        const who = (mode === 'family' && o.u) ? 'внёс ' + esc(o.u) : '';
+        const sub = [o.n ? esc(o.n) : '', who].filter(Boolean).join(' · ');
+        const sg = sign[grp[o.l]] || '';
+        return `<li><span class="opn">${esc(names[o.l])}${sub ? `<small>${sub}</small>` : ''}</span><b class="num${sg === '+' ? ' pl' : (sg === '−' ? ' mn' : '')}">${sg}${money(o.a)}</b><button type="button" class="x" data-delop="${o.id}" aria-label="Удалить запись">×</button></li>`;
+      }).join('') + '</ul>';
+  }).join('');
 }
 function addOp() {
   const btn = $('opAdd'), k = ym(YEAR, view);
-  const a = parse($('opAmt').value), line = $('opLine').value, date = $('opDate').value, note = $('opNote').value.trim();
+  const a = parse($('opAmt').value), line = opLine, date = $('opDate').value, note = $('opNote').value.trim();
   if (!(a > 0) || !line || !date || date.slice(0, 7) !== k) {
-    btn.textContent = 'Проверьте дату и сумму';
-    setTimeout(() => { if (btn.isConnected) btn.textContent = 'Добавить запись'; }, 2000);
+    btn.textContent = !(a > 0) ? 'Впишите сумму' : 'Проверьте дату и статью';
+    setTimeout(() => { if (btn.isConnected) btn.textContent = 'Добавить'; }, 2000);
     return;
   }
   const d = parseInt(date.slice(8), 10), id = uid(), t = Date.now(), D = cur();
   const u = ((user && user.email) || '').split('@')[0].slice(0, 30);
   (D.ops[k] = D.ops[k] || []).push({ id, d, l: line, a, n: note, u, t });
   fw(mode, 'm-' + k, { ops: { [id]: { d, l: line, a, n: note, u, t } } });
-  opDate = date; opLine = line;
+  opDate = date;
   renderMonth();
   const amt = $('opAmt'); if (amt) amt.focus();
 }
@@ -395,9 +456,9 @@ function delOp(id) {
 function renderMonth() {
   const D = cur(), fam = mode === 'family', k = ym(YEAR, view);
   let h = `<div class="mhead"><h2>${MONTHS[view]} ${YEAR}</h2><button type="button" class="btn" id="copyPrev">Взять суммы из прошлого месяца</button></div>`;
+  h += '<div style="margin-top:12px">' + opsFormHtml() + '</div>';
   h += '<div class="card" id="sum" style="margin-top:12px"></div>';
   h += '<div class="card sec" id="charts" style="margin-top:12px"></div>';
-  h += opsFormHtml();
   h += '<div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">';
   if (fam) {
     const c = num(D.contrib[k]);
@@ -407,8 +468,7 @@ function renderMonth() {
       '<p class="pnote">Вы вносите поровну. Сумма двух взносов идёт на общие расходы, накопления и инвестиции.</p></section>';
   }
   groups().forEach(g => {
-    const dot = g.wd ? '<span class="dot" style="background:var(--muted)"></span>' : `<span class="dot ${g.k}"></span>`;
-    h += `<section class="grp"><div class="ghead">${dot}<h3>${g.t}</h3><span class="gtot num" id="gt-${g.k}"></span></div><div>`;
+    h += `<section class="grp g-${g.k}"><div class="ghead">${gicon(g.k)}<h3>${g.t}</h3><span class="gtot num" id="gt-${g.k}"></span></div><div>`;
     D.lines.forEach(l => { if (l.g === g.k) h += rowHtml(l, k); });
     h += `</div><button type="button" class="add" data-add="${g.k}">+ ${g.add}</button>${g.note ? `<p class="pnote">${g.note}</p>` : ''}</section>`;
   });
@@ -439,6 +499,13 @@ function refreshMonth() {
   const p = $('gt-pot'); if (p) p.textContent = money(s.src);
   $('sum').innerHTML = sumHtml(s);
   const ch = $('charts'); if (ch) ch.innerHTML = chartsHtml([ym(YEAR, view)], 'месяца');
+  const D = cur(), k = ym(YEAR, view), tot = {};
+  D.lines.forEach(l => { let v = num((D.amt[l.id] || {})[k]); (D.ops[k] || []).forEach(o => { if (o.l === l.id) v += o.a; }); tot[l.id] = v; });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-bar]'), el => {
+    const l = D.lines.find(x => x.id === el.dataset.bar); if (!l) return;
+    const gt = s[l.g] || 0;
+    el.firstChild.style.width = gt > 0 ? Math.min(100, tot[l.id] / gt * 100).toFixed(1) + '%' : '0%';
+  });
   refreshOps();
 }
 
@@ -459,7 +526,7 @@ function collect(keys) {
   inc.push({ n: 'Снято с накоплений', v: wsav }, { n: 'Снято с инвестиций', v: winv });
   return { inc, exp };
 }
-function donut(title, items) {
+function donut(title, items, pal) {
   let list = items.filter(x => x.v > 0).sort((a, b) => b.v - a.v);
   if (list.length > 8) {
     const rest = list.slice(7).reduce((t, x) => t + x.v, 0);
@@ -470,7 +537,7 @@ function donut(title, items) {
   const R = 40, C = 2 * Math.PI * R;
   let acc = 0, svg = `<svg viewBox="0 0 120 120" role="img" aria-label="${title}">`, ul = '<ul class="dl">';
   list.forEach((x, i) => {
-    const col = x.grey ? '#8a93a5' : PAL[i % PAL.length];
+    const col = x.grey ? '#8a93a5' : pal[i % pal.length];
     const len = x.v / total * C, seg = Math.max(len - 1, 0.01);
     svg += `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 60 60)"><title>${esc(x.n)}: ${money(x.v)}</title></circle>`;
     acc += len;
@@ -481,7 +548,7 @@ function donut(title, items) {
 }
 function chartsHtml(keys, label) {
   const c = collect(keys);
-  return `<h3>Доходы и расходы ${label}</h3><div class="donuts">${donut(mode === 'family' ? 'Откуда деньги' : 'Доходы', c.inc)}${donut(mode === 'family' ? 'Общие расходы' : 'Расходы', c.exp)}</div>`;
+  return `<h3>Доходы и расходы ${label}</h3><div class="donuts">${donut(mode === 'family' ? 'Общие расходы' : 'Расходы', c.exp, PALE)}${donut(mode === 'family' ? 'Откуда деньги' : 'Доходы', c.inc, PALI)}</div>`;
 }
 
 /* ---------- год ---------- */
@@ -603,11 +670,21 @@ document.addEventListener('input', e => {
     refreshYear();
   }
 });
+function markChips() {
+  Array.prototype.forEach.call(document.querySelectorAll('[data-chip]'), c => c.classList.toggle('on', c.dataset.chip === opLine));
+  const o = $('opOther');
+  if (o) o.value = Array.prototype.some.call(o.options, x => x.value === opLine) ? opLine : '';
+  const ab = $('opAdd'); if (ab) { const gc = gcolor(opLine); ab.style.background = gc; ab.style.borderColor = gc; }
+}
+function markDates() {
+  Array.prototype.forEach.call(document.querySelectorAll('[data-qd]'), c => c.classList.toggle('on', c.dataset.qd === opDate));
+}
 document.addEventListener('change', e => {
-  if (e.target.id === 'opDate') opDate = e.target.value;
-  else if (e.target.id === 'opLine') opLine = e.target.value;
+  if (e.target.id === 'opDate') { opDate = e.target.value; markDates(); }
+  else if (e.target.id === 'opOther' && e.target.value) { opLine = e.target.value; markChips(); }
 });
 document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.target.id === 'opAmt' || e.target.id === 'opNote' || e.target.id === 'opDate')) { e.preventDefault(); addOp(); return; }
   if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('amt')) {
     const all = Array.prototype.slice.call(document.querySelectorAll('.amt')), i = all.indexOf(e.target);
     if (all[i + 1]) { e.preventDefault(); all[i + 1].focus(); all[i + 1].select(); }
@@ -642,6 +719,8 @@ document.addEventListener('click', e => {
     return;
   }
   if (el.id === 'opAdd') { addOp(); return; }
+  if (el.dataset.chip) { opLine = el.dataset.chip; markChips(); const a = $('opAmt'); if (a) a.focus(); return; }
+  if (el.dataset.qd) { opDate = el.dataset.qd; const d = $('opDate'); if (d) d.value = opDate; markDates(); const a = $('opAmt'); if (a) a.focus(); return; }
   if (el.dataset.delop) {
     if (el.dataset.armed) { delOp(el.dataset.delop); }
     else {
